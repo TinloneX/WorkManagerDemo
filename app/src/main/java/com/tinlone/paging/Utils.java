@@ -4,6 +4,7 @@ import android.content.Context;
 import android.util.Log;
 
 import androidx.lifecycle.LifecycleOwner;
+import androidx.work.Data;
 import androidx.work.WorkInfo;
 import androidx.work.WorkManager;
 import androidx.work.WorkRequest;
@@ -15,6 +16,9 @@ import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.net.UnknownHostException;
 import java.util.Arrays;
+import java.util.concurrent.LinkedBlockingDeque;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 public final class Utils {
 
@@ -24,12 +28,22 @@ public final class Utils {
         throw new IllegalStateException("Utils 不可被实例化");
     }
 
-    private static class GsonHolder {
+    private static class SingletonHolder {
         public static final Gson gson = new GsonBuilder().create();
+
+        public static final ThreadPoolExecutor executor = new ThreadPoolExecutor(
+                5, 5,
+                0, TimeUnit.MILLISECONDS,
+                new LinkedBlockingDeque<Runnable>()
+        );
     }
 
     public static Gson gson() {
-        return GsonHolder.gson;
+        return SingletonHolder.gson;
+    }
+
+    public static ThreadPoolExecutor executor(){
+        return SingletonHolder.executor;
     }
 
     public static <T> T safety(T source, T another) {
@@ -48,24 +62,29 @@ public final class Utils {
 
     /**
      * 添加简单监听
-     * @param context       上下文及生命周期
-     * @param workRequest   worker
-     * @param <T>   上下文且生命周期
+     *
+     * @param context     上下文及生命周期
+     * @param workRequest worker
+     * @param <T>         上下文且生命周期
      */
     public static <T extends Context & LifecycleOwner> void simpleWatch(T context, WorkRequest workRequest) {
         WorkManager.getInstance(context)
                 .getWorkInfoByIdLiveData(workRequest.getId())
                 .observe(context, workInfo -> {
-                    Utils.log(workInfo.getState());
-                    if (workInfo.getState() == WorkInfo.State.SUCCEEDED) {
-                        Utils.log("Simple Worker SUCCEEDED");
+                    if (workInfo==null){
+                        Utils.log("有一个空的WorkInfo被监测到");
+                        return;
                     }
-                    if (workInfo.getState() == WorkInfo.State.FAILED) {
-                        Utils.log("Simple Worker FAILED");
+                    Utils.log(workInfo);
+//                    if (workInfo.getState().isFinished()) {
+//                        Utils.log(workInfo.getOutputData());
+//                    }
+                    if (workInfo!=null){
+                        if (workInfo.getState().isFinished()) {
+                            String message = workInfo.getOutputData().getString("message");
+                        }
                     }
-                    if (workInfo.getState().isFinished()){
-                        Utils.log(workInfo.getOutputData());
-                    }
+
                 });
     }
 
